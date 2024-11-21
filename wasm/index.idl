@@ -1,0 +1,57 @@
+interface GameInput {
+  void pressLeft();
+  void pressRight();
+  void pressUp();
+  void pressDown();
+  void releaseLeft();
+  void releaseRight();
+  void releaseUp();
+  void releaseDown();
+};
+
+interface GameEntity {
+  float getX();
+  float getY();
+  float getVx();
+  float getVy();
+};
+
+interface PlayerEntity : GameEntity {
+  float getRadius();
+};
+PlayerEntity implements GameEntity;
+
+interface BulletEntity : GameEntity {
+
+};
+BulletEntity implements GameEntity;
+
+
+interface VisualInterface {
+  long resetEntityIterator();
+  long getNextEntityId();
+  long getEntityType(long id);
+  [Ref] PlayerEntity getPlayerEntity(long id);
+  [Ref] BulletEntity getBulletEntity(long id);
+};
+
+interface SimulationController : VisualInterface {
+  void SimulationController();
+  [Ref] ClientSimulationController createNewClient();
+  void removeClient([Ref] ClientSimulationController client);
+  void tick();
+};
+SimulationController implements VisualInterface;
+
+
+interface ClientSimulationController : VisualInterface {
+  [Ref] GameInput getLatestInput();
+};
+ClientSimulationController implements VisualInterface;
+
+interface SimulatedNetwork {
+  void setPacketDropRate(float rate);
+  void setPacketDelay(float delay);
+  void setPacketJitter(float jitter);
+  void setPacketReorderRate(float rate);
+};

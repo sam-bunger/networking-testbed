@@ -1,0 +1,5 @@
+*
+!/build/drift/**
+!package.json
+!index.js
+!index.d.ts
