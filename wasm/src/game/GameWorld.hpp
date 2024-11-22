@@ -1,6 +1,6 @@
 #pragma once
 
-#include <unordered_map>
+#include <map>
 #include "../network/IPhysicsWorld.hpp"
 #include "./EntityWorldInterface.hpp"
 #include "./GameInput.hpp"
@@ -20,6 +20,6 @@ public:
     virtual void removeEntityFromWorld(GameEntity* entity) override;
 
 private:
-    std::unordered_map<int, GameEntity*> entities;
+    std::map<int, GameEntity*> entities;
 };
 

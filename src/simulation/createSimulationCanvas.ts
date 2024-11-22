@@ -1,8 +1,10 @@
 import { MAIN } from "../../wasm";
+import { SimulationHandler } from "./SimulationHandler";
 
 export function createSimulationCanvas(
     simulation: MAIN.VisualInterface,
     canvasRef: HTMLCanvasElement,
+    handler: SimulationHandler,
     size: number
 ): () => void {
     const ctx = canvasRef.getContext('2d');
@@ -17,9 +19,7 @@ export function createSimulationCanvas(
     function render() {
         if (isDestroyed) return;
         
-        if (!ctx) {
-            throw new Error('Failed to get 2D context from canvas');
-        }
+        if (!ctx) throw new Error('Failed to get 2D context from canvas');
         
         // Clear canvas
         ctx.clearRect(0, 0, canvasRef.width, canvasRef.height);
@@ -50,15 +50,8 @@ export function createSimulationCanvas(
                 ctx.closePath();
             }
         } 
-        
-        // Request next frame
-        requestAnimationFrame(render);
+    
     }
     
-    // Start animation loop
-    render();
-    
-    return () => {
-        isDestroyed = true;
-    }
+    return handler.addFrameTickListener(render);
 }

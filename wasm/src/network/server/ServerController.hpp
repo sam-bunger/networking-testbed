@@ -10,6 +10,7 @@
 #include "../packets/input/IncomingPlayerInputPacket.hpp"
 #include "../packets/output/OutgoingWorldStatePacket.hpp"
 #include "./ClientConnection.hpp"
+#include "../packets/output/OutgoingEntityLifecyclePacket.hpp"
 
 const int MinPlayerId = 1000;
 const int MaxPlayerId = 99999;
@@ -40,13 +41,18 @@ public:
 	{
 		auto newEntity = ServerEntity<EntityType, Entity, Input>(this->world->createEntityHook(id, type, this));
 		auto [it, inserted] = entities.insert({id, newEntity});
-		std::cout << "NEW ENTITY: " << id << std::endl;
+		entityLifecyclePackets.emplace_back(this->frameNumber, true, *it->second.getEntity());
 		return (Entity*) it->second.getEntity();
 	}
 
     virtual void destroyEntity(int id) override
 	{
-		entities.erase(id);
+		auto it = entities.find(id);
+		if (it == entities.end())
+			return;
+		
+		entityLifecyclePackets.emplace_back(this->frameNumber, false, *it->second.getEntity());
+		entities.erase(it);
 	}
 
     virtual Entity* getEntityById(int id) override
@@ -139,15 +145,13 @@ private:
 				continue;
 			}
 
-			std::vector<PlayerInputPacket<Input>> inputs = client.inputBuffer.getNextInputs();
+			BufferedInput<Input> input = client.inputBuffer.getNextInput(this->frameNumber);
 
 			if (client.assignedEntityId != -1) 
 			{
-				for (auto& input : inputs) {
-					INetworkEntity<EntityType, Entity, Input>* e = entities.at(client.assignedEntityId).getEntity();
-					e->update(input.input);
-					controlledEntityInputs[e->getId()] = input;
-				}	
+				INetworkEntity<EntityType, Entity, Input>* e = entities.at(client.assignedEntityId).getEntity();
+				e->update(input.input);
+				controlledEntityInputs[e->getId()] = input;
 			}
 			
 			++it;
@@ -172,15 +176,28 @@ private:
 				clientNetwork->pushOutgoingPacket(packet);
 			}
 		}
+
+		for (auto& packet : entityLifecyclePackets) {
+			for (auto& [_, client] : clients) {
+				auto clientNetwork = client->network.lock();
+				if (!clientNetwork) 
+					continue;
+				clientNetwork->pushOutgoingPacket(packet);
+			}
+		}
+
+		entityLifecyclePackets.clear();
 	}
 
 	ServerConfig config;
 	
 	Input emptyInput;
 
-	std::unordered_map<int, PlayerInputPacket<Input>> controlledEntityInputs;
+	std::unordered_map<int, BufferedInput<Input>> controlledEntityInputs;
 
 	std::unordered_map<int, ServerEntity<EntityType, Entity, Input>> entities;
 
     std::unordered_map<int, std::shared_ptr<ClientConnection<EntityType, Entity, Input>>> clients;
+
+	std::vector<OutgoingEntityLifecyclePacket<EntityType, Entity, Input>> entityLifecyclePackets;
 };

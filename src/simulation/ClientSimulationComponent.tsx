@@ -1,45 +1,78 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MAIN } from '../../wasm';
 import { SimulationComponent } from './SimulationComponent';
+import { ClientSimulationStats } from './ClientSimulationStats';
+import { SimulationHandler } from './SimulationHandler';
 
 interface ClientSimulationComponentProps {
     simulation: MAIN.ClientSimulationController;
+    handler: SimulationHandler;
 }
 
 export const ClientSimulationComponent = ({ 
     simulation, 
+    handler,
 }: ClientSimulationComponentProps) => {
     const [isFocused, setIsFocused] = useState(false);
+    
+    const [packetDelay, setPacketDelay] = useState(150);
+    const [packetDropRate, setPacketDropRate] = useState(0);
+    const [packetJitter, setPacketJitter] = useState(0);
+    const [throughputRate, setThroughputRate] = useState(100);
+
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (isFocused) {
-            const onKeyDown = (event: KeyboardEvent) => {
+            let isHoldingLeft = false;
+            let isHoldingRight = false;
+            let isHoldingUp = false;
+            let isHoldingDown = false
+
+            const manageInputs = () => {
                 const gameInput = simulation.getLatestInput();
 
-                if (event.key === 'd') {
-                    gameInput.pressRight();
-                } else if (event.key === 'a') {
-                    gameInput.pressLeft();
-                } else if (event.key === 'w') {
-                    gameInput.pressUp();
-                } else if (event.key === 's') {
-                    gameInput.pressDown();
+                if (isHoldingLeft && !isHoldingRight) {
+                    gameInput.setLeftRight(-1);
+                } else if (isHoldingRight && !isHoldingLeft) {
+                    gameInput.setLeftRight(1);
+                } else {
+                    gameInput.setLeftRight(0);
+                }
+
+                if (isHoldingUp && !isHoldingDown) {
+                    gameInput.setUpDown(-1);
+                } else if (isHoldingDown && !isHoldingUp) {
+                    gameInput.setUpDown(1);
+                } else {
+                    gameInput.setUpDown(0);
                 }
             }
 
-            const onKeyUp = (event: KeyboardEvent) => {
-                const gameInput = simulation.getLatestInput();
-
+            const onKeyDown = (event: KeyboardEvent) => {
                 if (event.key === 'd') {
-                    gameInput.releaseRight();
+                    isHoldingRight = true;
                 } else if (event.key === 'a') {
-                    gameInput.releaseLeft();
+                    isHoldingLeft = true;
                 } else if (event.key === 'w') {
-                    gameInput.releaseUp();
+                    isHoldingUp = true;
                 } else if (event.key === 's') {
-                    gameInput.releaseDown();
+                    isHoldingDown = true;
                 }
+                manageInputs();
+            }
+
+            const onKeyUp = (event: KeyboardEvent) => {
+                if (event.key === 'd') {
+                    isHoldingRight = false;
+                } else if (event.key === 'a') {
+                    isHoldingLeft = false;
+                } else if (event.key === 'w') {
+                    isHoldingUp = false;
+                } else if (event.key === 's') {
+                    isHoldingDown = false;
+                }
+                manageInputs();
             }
 
             window.addEventListener('keydown', onKeyDown);
@@ -47,10 +80,8 @@ export const ClientSimulationComponent = ({
 
             return () => {
                 const gameInput = simulation.getLatestInput();
-                gameInput.releaseRight();
-                gameInput.releaseLeft();
-                gameInput.releaseUp();
-                gameInput.releaseDown();
+                gameInput.setUpDown(0);
+                gameInput.setLeftRight(0);
 
                 window.removeEventListener('keydown', onKeyDown);
                 window.removeEventListener('keyup', onKeyUp);
@@ -59,16 +90,92 @@ export const ClientSimulationComponent = ({
 
         return () => {};
     }, [isFocused]);
+
+    useEffect(() => {
+        simulation.getNetwork().setPacketDelay(packetDelay);
+    }, [packetDelay]);
+
+    useEffect(() => {
+        simulation.getNetwork().setPacketDropRate(packetDropRate);
+    }, [packetDropRate]);
+
+    useEffect(() => {
+        simulation.getNetwork().setPacketJitter(packetJitter);
+    }, [packetJitter]);
+
+    useEffect(() => {
+        simulation.getNetwork().setThroughputRate(throughputRate);
+    }, [throughputRate]);
+
+  
     
     return (
         <>
             <div 
                 ref={containerRef}
-                tabIndex={0} // Makes the div focusable
+                tabIndex={0}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
+                style={{
+                    padding: '5px',
+                }}
             >
-                <SimulationComponent simulation={simulation} />
+                <ClientSimulationStats simulation={simulation} />
+                <div className="network-controls" style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '5px',
+                    border: '1px solid black',
+                    marginBottom: '10px',     
+                    marginTop: '10px',  
+                    padding: '10px',
+                }}>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        Packet Delay (ms):
+                        <input
+                            type="number"
+                            value={packetDelay}
+                            onChange={(e) => setPacketDelay(Number(e.target.value))}
+                            min={0}
+                            style={{ width: '180px', marginLeft: '10px' }}
+                        />
+                    </label>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        Packet Drop Rate:
+                        <input
+                            type="number"
+                            value={packetDropRate}
+                            onChange={(e) => setPacketDropRate(Number(e.target.value))}
+                            min={0}
+                            max={1}
+                            step={0.1}
+                            style={{ width: '180px', marginLeft: '10px' }}
+                        />
+                    </label>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        Packet Jitter (ms):
+                        <input
+                            type="number"
+                            value={packetJitter}
+                            onChange={(e) => setPacketJitter(Number(e.target.value))}
+                            min={0}
+                            style={{ width: '180px', marginLeft: '10px' }}
+                        />
+                    </label>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        Throughput (kbps):
+                        <input
+                            type="number"
+                            value={throughputRate}
+                            onChange={(e) => setThroughputRate(Number(e.target.value))}
+                            min={0}
+                            max={10_000}
+                            step={2}
+                            style={{ width: '180px', marginLeft: '10px' }}
+                        />
+                    </label>
+                </div>
+                <SimulationComponent simulation={simulation} handler={handler} />
             </div>
         </>
     );

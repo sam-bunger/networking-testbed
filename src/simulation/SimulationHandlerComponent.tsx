@@ -14,29 +14,52 @@ export const SimulationHandlerComponent: React.FC<SimulationHandlerComponentProp
 
     useEffect(() => {
 
-        setClientSimulations([handler.addClientSimulation(), handler.addClientSimulation()]);
+        setClientSimulations([handler.addClientSimulation(),handler.addClientSimulation(),handler.addClientSimulation()]);
 
         return () => {
             handler.dispose();
         }
     }, [handler])
 
+    // useEffect(() => {
+    //     const interval = setInterval(() => {
+    //         setClientSimulations((simulations) => {
+    //             return [
+    //                 ...simulations,
+    //                 handler.addClientSimulation()
+    //             ]
+    //         })
+    //     }, 5000);
+
+    //     return () => {
+    //         clearInterval(interval);
+    //     }
+    // }, [clientSimulations])
+
     return (
         <>
-            {/* Render the server simulation first */}
-            <SimulationComponent simulation={handler.getController()} />
-            
             <div 
                 style={{
                     display: 'flex',
                     flexDirection: 'row',
-                    gap: '10px'
+                    gap: '10px',
+                    alignItems: 'flex-end',
+                    justifyContent: 'center',
                 }}
             >
+                <div
+                    style={{
+                        padding: '5px',
+                    }}
+                >
+                    <label>Server View</label>
+                    <SimulationComponent simulation={handler.getController()} handler={handler} />
+                </div>
                 {clientSimulations.map((simulation, index) => (
                     <ClientSimulationComponent 
                         key={index}
                         simulation={simulation}
+                        handler={handler}
                     />
                 ))}
             </div>

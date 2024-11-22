@@ -1,5 +1,6 @@
 #include "./GameEntity.hpp"
 #include "./EntityWorldInterface.hpp"
+#include <iostream>
 
 GameEntity::GameEntity(
     int id, 

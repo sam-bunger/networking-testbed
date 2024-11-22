@@ -20,6 +20,7 @@ struct WorldStateEntityHeader
 template<class Input>
 struct WorldStateControlledEntityHeader : WorldStateEntityHeader
 {
+    int latestClientFrame;
     Input input;
 };
 #pragma pack(pop)

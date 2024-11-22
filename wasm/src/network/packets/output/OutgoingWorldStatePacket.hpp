@@ -9,7 +9,7 @@ template<typename EntityType, class Entity, class Input>
 class OutgoingWorldStatePacket : public OutgoingNetworkPacket
 {
 public:
-    OutgoingWorldStatePacket(int frameNumber, const std::unordered_map<int, PlayerInputPacket<Input>> &inputs, const std::unordered_map<int, ServerEntity<EntityType, Entity, Input>> &entities)
+    OutgoingWorldStatePacket(int frameNumber, const std::unordered_map<int, BufferedInput<Input>> &inputs, const std::unordered_map<int, ServerEntity<EntityType, Entity, Input>> &entities)
     {
         int controlledEntityCount = inputs.size();
         int entityCount = entities.size() - controlledEntityCount;
@@ -39,6 +39,7 @@ public:
                 controlledEntityHeader->size = entity.getEntity()->serializeSize();
                 controlledEntityHeader->type = entity.getEntity()->getType();
                 controlledEntityHeader->input = inputs.at(entity.getEntity()->getId()).input;
+                controlledEntityHeader->latestClientFrame = inputs.at(entity.getEntity()->getId()).latestClientFrame;
                 current += sizeof(WorldStateControlledEntityHeader<Input>);
 
                 entity.getEntity()->serialize(current);

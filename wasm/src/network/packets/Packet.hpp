@@ -5,8 +5,7 @@ enum ReservedCommands
 {
   WORLD_UPDATE,
   INPUT_UPDATE,
-  ENTITY_CREATION,
-  ENTITY_DELETION
+  ENTITY_LIFECYCLE,
 };
 
 struct PacketHeader

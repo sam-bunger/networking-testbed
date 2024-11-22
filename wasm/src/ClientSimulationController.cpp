@@ -6,7 +6,7 @@ ClientSimulationController::ClientSimulationController()
     , clientWorld()
     , network()
     , currentEntityIt()
-    , controller(&clientWorld, network.clientInterface, ClientConfig())
+    , controller(&clientWorld, network.clientInterface, ClientConfig(60))
 { 
 }
 
@@ -26,6 +26,11 @@ GameInput &ClientSimulationController::getLatestInput() {
 SimulatedNetwork &ClientSimulationController::getNetwork()
 {
     return network;
+}
+
+int ClientSimulationController::getLastPredictedFrameCount()
+{
+    return controller.getLastPredictedFrameCount();
 }
 
 std::weak_ptr<INetwork> ClientSimulationController::getClientNetwork() {

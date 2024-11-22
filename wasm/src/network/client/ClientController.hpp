@@ -4,15 +4,19 @@
 #include <deque>
 #include <iostream>
 #include <vector>
+#include <numeric>
 #include "../INetwork.hpp"
 #include "../INetworkWorldController.hpp"
 #include "./ClientEntity.hpp"
 #include "../packets/PlayerInputPacket.hpp"
 #include "../packets/output/OutgoingPlayerInputPacket.hpp"
 #include "../packets/input/IncomingWorldStatePacket.hpp"
-
+#include "../packets/input/IncomingEntityLifecyclePacket.hpp"
 struct ClientConfig 
-{};
+{
+    ClientConfig(int tps) : ticksPerSeconds(tps) {}
+    int ticksPerSeconds;
+};
 
 template<typename EntityType, class Entity, class Input>
 class ClientController : public INetworkWorldController<EntityType, Entity, Input>
@@ -29,7 +33,11 @@ public:
         entities(),
         controllerId(-1),
         latestInputs(),
-        latestWorldState(NULL)
+        latestWorldState(NULL),
+        accumulatedFrameAdjustment(0.0f),
+        roundTripTicksHistory(),
+        averageRoundTripTicks(0.0f),
+        lastVerifiedFrame(-1)
 	{ }
 
 
@@ -71,15 +79,18 @@ public:
 
     void tick(const Input &input)
     {
-        processLatestInputs(input);
-        sendInputUpdate();
         processIncomingMessages();
         reconcile();
 
         INetworkWorldController<EntityType, Entity, Input>::tick();
 
+        processLatestInputs(input);
+        sendInputUpdate();
+
+
         updateEntites(input);
         this->world->physicsStepHook();
+        serializeEntities(input);
     }
 
     const std::unordered_map<int, ClientEntity<EntityType, Entity, Input>>& getEntities()
@@ -87,8 +98,12 @@ public:
 		return entities;
 	}
 
-private:
+    int getLastPredictedFrameCount()
+    {
+        return lastPredictedFrameCount;
+    }
 
+private:
     void processIncomingMessages()
     {
         latestWorldState = nullptr;
@@ -113,6 +128,25 @@ private:
                     }
                     continue;
                 }
+                case ReservedCommands::ENTITY_LIFECYCLE:
+                {
+                    IncomingEntityLifecyclePacket<EntityType> packet(message.getPacketData().get(), message.getPacketSize());
+                    if (packet.isValid()) {
+                        switch (packet.getLifecycleType()) {
+                            case EntityLifecycleType::CREATED:
+                            {
+                                createEntity(packet.getEntityId(), packet.getEntityType());
+                                break;
+                            }
+                            case EntityLifecycleType::DESTROYED:
+                            {
+                                destroyEntity(packet.getEntityId());
+                                break;
+                            }
+                        }
+                    }
+                    continue;
+                }
                 default:
                     continue;
             }
@@ -125,7 +159,11 @@ private:
 
         int verifiedFrame = latestWorldState->getServerFrame();
 
-        int predictedFrame = this->frameNumber;
+        if (verifiedFrame <= lastVerifiedFrame) return;
+
+        lastVerifiedFrame = verifiedFrame;
+
+        int latestClientFrame = -1;
 
         // Roll everything back to the verified frame
         for (auto& [id, entity] : entities) {
@@ -140,6 +178,9 @@ private:
                 if (latestWorldState->isControlledEntity(id)) {
                     WorldStateControlledEntityHeader<Input> *controlledHeader = latestWorldState->getControlledEntityHeader(id);
                     entity.timeline.serializeInputOntoTimeline(verifiedFrame, controlledHeader->input);
+                    if (controlledHeader->id == controllerId) {
+                        latestClientFrame = controlledHeader->latestClientFrame;
+                    }
                 }
 
                 entity.getEntity()->deserialize(latestWorldState->getEntityData(id));
@@ -152,8 +193,65 @@ private:
             entity.timeline.clearBeforeFrame(verifiedFrame);
         }
 
+        uint64_t roundTripTime = 0;
+
+        if (latestClientFrame != -1)
+        {
+            roundTripTime = getRoundTripTime(latestClientFrame);
+        }
+
+        float roundTripTicks = ((float)roundTripTime / (1000.0f / (float)config.ticksPerSeconds));
+
+        maxRoundTripTicks = std::max(roundTripTicks, maxRoundTripTicks);
+        
+        // Update rolling average
+        roundTripTicksHistory.push_back(roundTripTicks);
+        if (roundTripTicksHistory.size() > ROUND_TRIP_HISTORY_SIZE) {
+            roundTripTicksHistory.pop_front();
+        }
+        
+        if (!roundTripTicksHistory.empty()) {
+            averageRoundTripTicks = std::accumulate(roundTripTicksHistory.begin(), 
+                                                  roundTripTicksHistory.end(), 
+                                                  0.0f) / roundTripTicksHistory.size();
+        }
+
+        // Use exponential moving average for smoother RTT updates
+        if (roundTripTicksHistory.empty()) {
+            averageRoundTripTicks = roundTripTicks;
+        } else {
+            averageRoundTripTicks = averageRoundTripTicks * (1.0f - ADJUSTMENT_RATE) + 
+                                   roundTripTicks * ADJUSTMENT_RATE;
+        }
+
+        // Calculate target prediction frames based on RTT
+        float targetPredictionFrames = std::max(
+            MIN_PREDICTION_FRAMES,
+            averageRoundTripTicks + BUFFER_FRAMES
+        );
+
+        int predictedFrame = this->frameNumber;
+        float currentPredictionCount = (float)(predictedFrame - verifiedFrame);
+
+        // Only adjust if we're significantly off from our target
+        float predictionDelta = targetPredictionFrames - currentPredictionCount;
+        if (std::abs(predictionDelta) > JITTER_THRESHOLD) {
+            // Gradually move towards target to avoid sudden changes
+            float adjustment = std::copysign(
+                std::min(std::abs(predictionDelta) * ADJUSTMENT_RATE, 1.0f),
+                predictionDelta
+            );
+            accumulatedFrameAdjustment += adjustment;
+        }
+
+        // Apply accumulated adjustments
+        int finalFrameAdjustment = (int)accumulatedFrameAdjustment;
+        accumulatedFrameAdjustment -= finalFrameAdjustment;
+
+        lastPredictedFrameCount = (predictedFrame + finalFrameAdjustment) - verifiedFrame;
+
         this->frameNumber = verifiedFrame;
-        for (int f = verifiedFrame + 1; f <= predictedFrame; f++) {
+        for (int f = verifiedFrame + 1; f <= predictedFrame + finalFrameAdjustment; f++) {
             INetworkWorldController<EntityType, Entity, Input>::tick();
 
             // Reapply inputs
@@ -189,6 +287,7 @@ private:
     void processLatestInputs(const Input &input)
     {
         latestInputs.push_back(PlayerInputPacket<Input>(this->getFrameNumber(), input));
+        inputTimestamps[this->getFrameNumber()] = now();
         if (latestInputs.size() > 20) {
             latestInputs.pop_front();
         }
@@ -208,6 +307,35 @@ private:
         }
     }
 
+    void serializeEntities(const Input &input)
+    {
+        for (auto& [id, entity] : entities) {
+            if (controllerId != -1 && id == controllerId) 
+            {
+                entity.timeline.serializeOntoTimeline(this->frameNumber, input, *entity.getEntity());
+            }
+            else 
+            {
+                entity.timeline.serializeDataOntoTimeline(this->frameNumber, *entity.getEntity());
+            }
+        }
+    }
+
+    uint64_t getRoundTripTime(int frame)
+    {
+        if (inputTimestamps.find(frame) == inputTimestamps.end()) {
+            return 0;
+        }
+
+        return now() - inputTimestamps[frame];
+    }
+
+    uint64_t now()
+    {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    }
+
+
     ClientConfig config;
     std::weak_ptr<INetwork> network;
     const Input emptyInput;
@@ -215,4 +343,19 @@ private:
     int controllerId;
     std::deque<PlayerInputPacket<Input>> latestInputs; 
     std::shared_ptr<IncomingWorldStatePacket<EntityType, Entity, Input>> latestWorldState;
+
+    // Reconciliation
+    std::map<int, uint64_t> inputTimestamps;
+    float accumulatedFrameAdjustment;
+    std::deque<float> roundTripTicksHistory;
+    float averageRoundTripTicks;
+    float maxRoundTripTicks;
+    float lastPredictedFrameCount;
+    int lastVerifiedFrame;
+
+    static const size_t ROUND_TRIP_HISTORY_SIZE = 20; 
+    static constexpr float JITTER_THRESHOLD = 0.5f;  // Frames of jitter we'll tolerate before adjusting
+    static constexpr float ADJUSTMENT_RATE = 0.2f;   // How quickly we adjust to new conditions
+    static constexpr float MIN_PREDICTION_FRAMES = 2.0f;  // Minimum frames we'll predict ahead
+    static constexpr float BUFFER_FRAMES = 2.0f;     // Extra frames buffer for safety
 };

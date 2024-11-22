@@ -5,17 +5,8 @@ public:
     GameInput();
     ~GameInput();
 
-    void pressLeft();
-    void releaseLeft(); 
-
-    void pressRight();
-    void releaseRight();
-    
-    void pressUp();
-    void releaseUp();
-
-    void pressDown();
-    void releaseDown();
+    void setLeftRight(int value);
+    void setUpDown(int value);
 
     signed char leftRight;
     signed char upDown;

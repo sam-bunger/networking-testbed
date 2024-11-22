@@ -9,7 +9,7 @@ PlayerEntity::PlayerEntity(
     EntityController<GameEntityType, GameEntity>* controller,
     EntityWorldInterface<GameEntity>* world
 ) : GameEntity(id, type, controller, world),
-    radius(10)
+    radius(14)
 {}
 
 
@@ -26,7 +26,7 @@ void PlayerEntity::update(const GameInput &input)
         dy /= length;
         
         // Apply speed and add to velocity
-        const float speed = 0.3f;
+        const float speed = 0.6f;
         vx += dx * speed;
         vy += dy * speed;
     }

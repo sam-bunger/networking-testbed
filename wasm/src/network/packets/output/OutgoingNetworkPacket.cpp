@@ -9,7 +9,7 @@ OutgoingNetworkPacket::OutgoingNetworkPacket()
 {
   packetSize = 0;
   originalSize = 0;
-  reliable = true;
+  reliable = false;
 }
 
 void OutgoingNetworkPacket::applyCompression()

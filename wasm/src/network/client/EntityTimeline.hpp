@@ -22,7 +22,7 @@ public:
     EntityTimeline(int dataSize) : dataSize(dataSize) 
     {    }
     
-    void serializeOntoTimeline(int frameNumber, Input &input, INetworkEntity<EntityType, Entity, Input> &entity)
+    void serializeOntoTimeline(int frameNumber, const Input &input, INetworkEntity<EntityType, Entity, Input> &entity)
     {
         if (entities.find(frameNumber) == entities.end()) {
             entities[frameNumber] = std::make_shared<TimelineElement<Input>>(dataSize);
@@ -39,7 +39,7 @@ public:
         entity.serialize(entities[frameNumber]->data.get());
     }
 
-    void serializeInputOntoTimeline(int frameNumber, Input &input)
+    void serializeInputOntoTimeline(int frameNumber, const Input &input)
     {
         if (entities.find(frameNumber) == entities.end()) {
             entities[frameNumber] = std::make_shared<TimelineElement<Input>>(dataSize);

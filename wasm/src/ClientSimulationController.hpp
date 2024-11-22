@@ -17,6 +17,8 @@ public:
 
     void tick();
     GameInput &getLatestInput();
+    int getLastPredictedFrameCount();
+
 
     virtual int resetEntityIterator() override;
     virtual int getNextEntityId() override;

@@ -1,12 +1,6 @@
 interface GameInput {
-  void pressLeft();
-  void pressRight();
-  void pressUp();
-  void pressDown();
-  void releaseLeft();
-  void releaseRight();
-  void releaseUp();
-  void releaseDown();
+  void setLeftRight(long value);
+  void setUpDown(long value);
 };
 
 interface GameEntity {
@@ -46,6 +40,8 @@ SimulationController implements VisualInterface;
 
 interface ClientSimulationController : VisualInterface {
   [Ref] GameInput getLatestInput();
+  [Ref] SimulatedNetwork getNetwork();
+  long getLastPredictedFrameCount();
 };
 ClientSimulationController implements VisualInterface;
 
@@ -53,5 +49,5 @@ interface SimulatedNetwork {
   void setPacketDropRate(float rate);
   void setPacketDelay(float delay);
   void setPacketJitter(float jitter);
-  void setPacketReorderRate(float rate);
+  void setThroughputRate(float kbps);
 };

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <queue>
+#include <list>
 #include <functional>
 #include "./network/INetwork.hpp"
 
@@ -20,19 +20,27 @@ public:
     virtual std::vector<NetworkPacket> getIncomingPackets() override; 
     virtual void pushOutgoingPacket(OutgoingNetworkPacket packet) override;
 
-    void setQueues(std::queue<SimulatedPacket>* recieveFrom, std::queue<SimulatedPacket>* pushTo);
+    void setQueues(std::list<SimulatedPacket>* recieveFrom, std::list<SimulatedPacket>* pushTo);
 
     float packetDropRate;
-    float packetReorderRate;
     uint64_t packetJitter;
     uint64_t packetDelay;
+    float throughputRate;
 
-    std::queue<SimulatedPacket>* recieveFrom;
-    std::queue<SimulatedPacket>* pushTo;
+    std::list<SimulatedPacket>* recieveFrom;
+    std::list<SimulatedPacket>* pushTo;
 
 private:
-    std::vector<NetworkPacket> getReadyPackets(std::queue<SimulatedPacket>& queue);
+    std::vector<NetworkPacket> getReadyPackets(std::list<SimulatedPacket>& queue);
 
+    struct ThroughputWindow {
+        uint64_t timestamp;
+        size_t bytes;
+    };
+    std::vector<ThroughputWindow> throughputWindows;
+    static constexpr size_t WINDOW_SIZE_MS = 1000;
+
+    bool checkThroughputLimit(size_t packetSize);
 };
 
 class SimulatedNetwork 
@@ -43,10 +51,10 @@ public:
     void setPacketDropRate(float rate);
     void setPacketDelay(float delay);
     void setPacketJitter(float jitter);
-    void setPacketReorderRate(float rate);
+    void setThroughputRate(float kbps);
 
-    std::queue<SimulatedPacket> packetsToServer;
-    std::queue<SimulatedPacket> packetsToClient;
+    std::list<SimulatedPacket> packetsToServer;
+    std::list<SimulatedPacket> packetsToClient;
 
     std::shared_ptr<SimulatedNetworkInterface> serverInterface;
     std::shared_ptr<SimulatedNetworkInterface> clientInterface;

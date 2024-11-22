@@ -8,6 +8,7 @@ export class SimulationHandler {
     private lastTime: number = 0;
     private readonly frameInterval: number = 1000 / 60; // 60 FPS = ~16.67ms per frame
     private readonly maxDeltaTime: number = 200; // Max 200ms between frames (~5 FPS minimum)
+    private frameListeners: Array<() => void> = [];
 
     constructor(controller: MAIN.SimulationController) {
         this.controller = controller;
@@ -24,10 +25,19 @@ export class SimulationHandler {
             this.lastTime = time - (deltaTime % this.frameInterval);
             this.controller.tick();
         }
-        
+
+        this.frameListeners.forEach(listener => listener());
+
         if (!this.destroyed) {
             requestAnimationFrame(this.tick.bind(this));
         }
+    }
+
+    addFrameTickListener(listener: () => void) {
+        this.frameListeners.push(listener);
+        return () => {
+            this.frameListeners = this.frameListeners.filter(l => l !== listener);
+        };
     }
 
     getController(): MAIN.SimulationController {

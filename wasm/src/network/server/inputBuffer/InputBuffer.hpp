@@ -1,109 +1,86 @@
 #pragma once
 
+#include <iostream>
+#include <map>
 #include "./DropRateCalculator.hpp"
 #include "./BufferSizeCalculator.hpp"
 #include "../../packets/input/IncomingPlayerInputPacket.hpp"
-#include <iostream>
+
+template<class Input>
+class BufferedInput
+{
+public:
+    BufferedInput() : latestClientFrame(0)
+    {}
+
+    BufferedInput(Input input, int latestClientFrame)
+        : input(input), latestClientFrame(latestClientFrame)
+    {}
+
+    int latestClientFrame;
+    Input input;
+};
 
 template<class Input>
 class InputBuffer
 {
 public:
-    InputBuffer() : bufferSizeCalculator(&realDropRate)
-    {
-        lastFrameProcessed = -1;
-        realDropRate.setPacketDistance(3);
-    }
+    InputBuffer() : lastRequestedFrameNumber(-1)
+    { }
 
     void flush()
     {
         inputQueue.clear();
-        lastFrameProcessed = -1;
-        realDropRate.reset();
     }
 
     void addInputs(const std::vector<PlayerInputPacket<Input>> &inputs)
     {
-        int size = inputs.size();
-        realDropRate.latestInput(inputs[size - 1].frameNumber);
-
-        for (int i = 0; i < size; i++)
+        for (const auto& input : inputs)
         {
-            this->addSingleInput(inputs[i]);
+            inputQueue.emplace(input.frameNumber, input);
         }
     }
 
-    std::vector<PlayerInputPacket<Input>> getNextInputs()
+    BufferedInput<Input> getNextInput(int frame)
     {
-        std::vector<PlayerInputPacket<Input>> newInputs;
+        lastRequestedFrameNumber = frame;
 
-        // Reduce buffer until we find something that is <= than LFP
-        while (inputQueue.size() > 1 && inputQueue.front().frameNumber <= lastFrameProcessed)
+        if (inputQueue.empty())
         {
-            inputQueue.pop_front();
+            lastUsed.latestClientFrame = -1;
+            return lastUsed;
         }
 
-        // Pull from the queue
-        if (inputQueue.size() == 0)
-        {
-            // Buffer is empty!
-            if (lastUsed.frameNumber == -1)
-                return newInputs;
-            lastUsed.frameNumber += 1;
-            newInputs.push_back(lastUsed);
-        }
-        else if (inputQueue.size() > bufferSizeCalculator.getBufferSize())
-        {
-            // Buffer is full!
-            newInputs.push_back(inputQueue.front());
-            inputQueue.pop_front();
-            newInputs.push_back(inputQueue.front());
-            lastUsed = inputQueue.front();
-            lastUsed.frameNumber -= 1;
-            inputQueue.pop_front();
-        }
-        else
-        {
-            // Buffer is in a good state
-            newInputs.push_back(inputQueue.front());
-            lastUsed = inputQueue.front();
-            inputQueue.pop_front();
+        // Find the largest frame in the queue
+        int latestClientFrame = inputQueue.rbegin()->first;
+        Input latestInput = inputQueue.rbegin()->second.input;
+
+        // Remove all frames older than the requested frame
+        auto staleIt = inputQueue.lower_bound(frame);
+        if (staleIt != inputQueue.begin()) {
+            inputQueue.erase(inputQueue.begin(), staleIt);
         }
 
-        lastFrameProcessed = newInputs.back().frameNumber;
+        auto it = inputQueue.find(frame);
+        
+        if (it != inputQueue.end())
+        {
+            BufferedInput<Input> result(it->second.input, latestClientFrame);
+            lastUsed = result;
+            inputQueue.erase(it);  // Only remove the current frame since we already cleaned up old ones
 
-        return newInputs;
+            return result;
+        }
+
+        std::cout << "Frame " << frame << " not found in input buffer. Using latest input." << std::endl;
+
+        lastUsed.latestClientFrame = latestClientFrame;
+        lastUsed.input = latestInput;
+
+        return lastUsed;
     }
 
 private:
-    void addSingleInput(const PlayerInputPacket<Input> &input)
-    {
-        // If queue is empty or new input has higher frame number than the back, push to back
-        if (inputQueue.empty() || input.frameNumber > inputQueue.back().frameNumber)
-        {
-            inputQueue.push_back(input);
-            return;
-        }
-
-        // Find the appropriate position for the new value
-        auto it = inputQueue.begin();
-        while (it != inputQueue.end() && (*it).frameNumber < input.frameNumber)
-        {
-            ++it;
-        }
-
-        // If frame number already exists, replace it
-        if (it != inputQueue.end() && (*it).frameNumber == input.frameNumber)
-        {
-            *it = input;
-        }
-        else
-        {
-            // Insert the new value at the correct position
-            inputQueue.insert(it, input);
-        }
-    }
-
     std::vector<Input> getInputList(const std::vector<PlayerInputPacket<Input>> &newInputs)
     {
         std::vector<Input> inputs;
@@ -114,11 +91,7 @@ private:
         return inputs;
     }
 
-    PlayerInputPacket<Input> lastUsed;
-
-    std::list<PlayerInputPacket<Input>> inputQueue;
-    int lastFrameProcessed;
-
-    DropRateCalculator realDropRate;
-    BufferSizeCalculator bufferSizeCalculator;
+    BufferedInput<Input> lastUsed;
+    std::map<int, PlayerInputPacket<Input>> inputQueue; 
+    int lastRequestedFrameNumber;
 };
