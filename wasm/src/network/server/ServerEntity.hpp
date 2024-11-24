@@ -7,9 +7,11 @@
 template<typename EntityType, class Entity, class Input>
 class ServerEntity {
 public:
-    ServerEntity(INetworkEntity<EntityType, Entity, Input>* entity) : entity(entity), 
-                                                                      updated(true), 
-                                                                      lastHash(0) 
+    ServerEntity(INetworkEntity<EntityType, Entity, Input>* entity) 
+        : entity(entity)
+        , updated(true)
+        , lastHash(0)
+        , readyForDeletion(false)
     { } 
 
     INetworkEntity<EntityType, Entity, Input>* getEntity() const {
@@ -34,8 +36,17 @@ public:
         }
     }
 
+    bool isReadyForDeletion() const {
+        return readyForDeletion;
+    }
+
+    void setReadyForDeletion(bool ready) {
+        readyForDeletion = ready;
+    }
+
 private:
     std::shared_ptr<INetworkEntity<EntityType, Entity, Input>> entity;
     bool updated;
     size_t lastHash;
+    bool readyForDeletion;
 };

@@ -72,8 +72,6 @@ public:
             return result;
         }
 
-        std::cout << "Frame " << frame << " not found in input buffer. Using latest input." << std::endl;
-
         lastUsed.latestClientFrame = latestClientFrame;
         lastUsed.input = latestInput;
 

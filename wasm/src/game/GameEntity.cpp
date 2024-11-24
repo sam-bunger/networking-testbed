@@ -15,13 +15,24 @@ GameEntity::GameEntity(
     vy = 0;
 
     this->world = world;
-    this->world->addEntityToWorld(this);
+    addToWorld();
 }
 
 GameEntity::~GameEntity()
 {
+    removeFromWorld();
+}
+
+void GameEntity::addToWorld() 
+{
+    this->world->addEntityToWorld(this);
+}
+
+void GameEntity::removeFromWorld() 
+{
     this->world->removeEntityFromWorld(this);
 }
+
 
 int GameEntity::serializeSize() 
 {

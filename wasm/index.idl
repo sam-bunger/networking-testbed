@@ -1,6 +1,7 @@
 interface GameInput {
   void setLeftRight(long value);
   void setUpDown(long value);
+  void setFire(boolean value);
 };
 
 interface GameEntity {

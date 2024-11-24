@@ -38,21 +38,40 @@ export const SimulationHandlerComponent: React.FC<SimulationHandlerComponentProp
 
     return (
         <>
+        <div
+             style={{
+                backgroundColor: "#f0f0f0",
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+            }}
+        >
             <div 
                 style={{
                     display: 'flex',
                     flexDirection: 'row',
                     gap: '10px',
                     alignItems: 'flex-end',
-                    justifyContent: 'center',
+                    backgroundColor: "#f0f0f0",
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    overflowX: 'scroll',
+                    paddingLeft: '20px',
+                    paddingRight: '20px',
                 }}
             >
                 <div
                     style={{
                         padding: '5px',
+                        alignSelf: 'flex-end',
+                        flexShrink: 0,
                     }}
                 >
-                    <label>Server View</label>
+                    <h3>Server View</h3>
                     <SimulationComponent simulation={handler.getController()} handler={handler} />
                 </div>
                 {clientSimulations.map((simulation, index) => (
@@ -63,6 +82,8 @@ export const SimulationHandlerComponent: React.FC<SimulationHandlerComponentProp
                     />
                 ))}
             </div>
+        </div>
+            
         </>
     );
 };

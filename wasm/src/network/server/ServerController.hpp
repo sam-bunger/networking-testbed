@@ -50,9 +50,9 @@ public:
 		auto it = entities.find(id);
 		if (it == entities.end())
 			return;
-		
+
+		it->second.setReadyForDeletion(true);
 		entityLifecyclePackets.emplace_back(this->frameNumber, false, *it->second.getEntity());
-		entities.erase(it);
 	}
 
     virtual Entity* getEntityById(int id) override
@@ -81,6 +81,7 @@ public:
 		INetworkWorldController<EntityType, Entity, Input>::tick();
 		processIncomingMessages();
 		updateEntities();
+		pruneEntities();
 		this->world->physicsStepHook();
 		sendOutgoingMessages();
     }
@@ -187,6 +188,17 @@ private:
 		}
 
 		entityLifecyclePackets.clear();
+	}
+
+	void pruneEntities()
+	{
+		for (auto it = entities.begin(); it != entities.end();) {
+			if (it->second.isReadyForDeletion()) {
+				it = entities.erase(it);
+			} else {
+				++it;
+			}
+		}
 	}
 
 	ServerConfig config;

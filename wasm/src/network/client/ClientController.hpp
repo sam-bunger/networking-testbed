@@ -44,19 +44,19 @@ public:
     virtual Entity* createEntity(EntityType type) override
 	{
 		int id = this->getNewEntityId(type);
-		return (Entity*) createEntity(id, type);
+        // std::cout << "Creating entity " << id << std::endl;
+		return (Entity*) createEntity(id, type, false, this->getFrameNumber());
 	}
 
-	virtual Entity* createEntity(int id, EntityType type) override
-	{
-		auto newEntity = ClientEntity<EntityType, Entity, Input>(this->world->createEntityHook(id, type, this));
-		auto [it, inserted] = entities.insert({id, newEntity});
-		return (Entity*) it->second.getEntity();
-	}
+    virtual Entity* createEntity(int id, EntityType type) override
+    {
+        return (Entity*) createEntity(id, type, false, this->getFrameNumber());
+    }
 
     virtual void destroyEntity(int id) override
 	{
-		entities.erase(id);
+        // std::cout << "Destroying entity " << id << std::endl;
+        destroyEntity(id, false, this->getFrameNumber());
 	}
 
     virtual Entity* getEntityById(int id) override
@@ -69,7 +69,8 @@ public:
 
 	virtual bool entityExists(int id) override
 	{
-		return entities.find(id) != entities.end();
+		auto it = entities.find(id);
+		return it != entities.end() && !it->second.isMarkedForDeletion();
 	}
 
     void setControlledEntity(int id)
@@ -87,7 +88,6 @@ public:
         processLatestInputs(input);
         sendInputUpdate();
 
-
         updateEntites(input);
         this->world->physicsStepHook();
         serializeEntities(input);
@@ -104,6 +104,38 @@ public:
     }
 
 private:
+
+    Entity* createEntity(int id, EntityType type, bool networkVerified, int frameCreated)
+	{
+		auto entityIt = entities.find(id);
+		if (entityIt == entities.end()) 
+        {
+            // Create new entity if it doesn't exist
+            auto newEntity = ClientEntity<EntityType, Entity, Input>(this->world->createEntityHook(id, type, this));
+            auto [it, inserted] = entities.insert({id, newEntity});
+            entityIt = it;
+        }
+
+        entityIt->second.setDeletionState(false);
+        entityIt->second.resetFrameCreated(frameCreated);
+
+		if (networkVerified) 
+        {
+            entityIt->second.networkCreated();
+        }
+
+		return (Entity*)entityIt->second.getEntity();
+	}
+
+    void destroyEntity(int id, bool networkVerified, int frameDeleted)
+    {
+        auto it = entities.find(id);
+		if (it == entities.end()) return;
+        it->second.setDeletionState(true);
+        it->second.resetFrameDeleted(frameDeleted);
+        if (networkVerified) it->second.networkDeleted();
+    }
+
     void processIncomingMessages()
     {
         latestWorldState = nullptr;
@@ -131,20 +163,7 @@ private:
                 case ReservedCommands::ENTITY_LIFECYCLE:
                 {
                     IncomingEntityLifecyclePacket<EntityType> packet(message.getPacketData().get(), message.getPacketSize());
-                    if (packet.isValid()) {
-                        switch (packet.getLifecycleType()) {
-                            case EntityLifecycleType::CREATED:
-                            {
-                                createEntity(packet.getEntityId(), packet.getEntityType());
-                                break;
-                            }
-                            case EntityLifecycleType::DESTROYED:
-                            {
-                                destroyEntity(packet.getEntityId());
-                                break;
-                            }
-                        }
-                    }
+                    if (packet.isValid()) handleEntityLifecyclePacket(packet);
                     continue;
                 }
                 default:
@@ -153,25 +172,59 @@ private:
         }
     }
 
+    void handleEntityLifecyclePacket(IncomingEntityLifecyclePacket<EntityType> &packet)
+    {
+        switch (packet.getLifecycleType()) {
+            case EntityLifecycleType::CREATED:
+            {
+                createEntity(packet.getEntityId(), packet.getEntityType(), true, packet.getFrameNumber());
+                break;
+            }
+            case EntityLifecycleType::DESTROYED:
+            {
+                destroyEntity(packet.getEntityId(), true, packet.getFrameNumber());
+                break;
+            }
+        }   
+    }
+
+    /**
+     * ROLLBACK RECONCILATION
+     */
     void reconcile()
     {
         if (latestWorldState == NULL) return;
 
         int verifiedFrame = latestWorldState->getServerFrame();
-
         if (verifiedFrame <= lastVerifiedFrame) return;
-
         lastVerifiedFrame = verifiedFrame;
 
-        int latestClientFrame = -1;
+        int latestClientFrame = rollback(verifiedFrame);
+        int finalFrame = determinePredictedFrame(verifiedFrame, latestClientFrame);
+        rollforth(verifiedFrame, finalFrame);
+        pruneObjectPool(verifiedFrame);
+    }
 
+    int rollback(int verifiedFrame)
+    {
+        int latestClientFrame = -1;
         // Roll everything back to the verified frame
         for (auto& [id, entity] : entities) {
+            if (verifiedFrame < entity.getFrameCreated()) 
+            {
+                entity.setDeletionState(true);
+            } 
+            else if (verifiedFrame >= entity.getFrameCreated() && verifiedFrame < entity.getFrameDeleted()) 
+            {
+                entity.setDeletionState(false);
+            }
+
             if (latestWorldState->isEntityInPacket(id))
             {
                 WorldStateEntityHeader *header = latestWorldState->getEntityHeader(id);
                 if (header->type != entity.getEntity()->getType()) {
                     // error - entity type mismatch - figure out way to handle this case
+                    std::cerr << "Entity type mismatch! on no"  << std::endl;
                     continue;
                 }
 
@@ -193,8 +246,12 @@ private:
             entity.timeline.clearBeforeFrame(verifiedFrame);
         }
 
-        uint64_t roundTripTime = 0;
+        return latestClientFrame;
+    }
 
+    int determinePredictedFrame(int verifiedFrame, int latestClientFrame)
+    {
+        uint64_t roundTripTime = 0;
         if (latestClientFrame != -1)
         {
             roundTripTime = getRoundTripTime(latestClientFrame);
@@ -202,8 +259,6 @@ private:
 
         float roundTripTicks = ((float)roundTripTime / (1000.0f / (float)config.ticksPerSeconds));
 
-        maxRoundTripTicks = std::max(roundTripTicks, maxRoundTripTicks);
-        
         // Update rolling average
         roundTripTicksHistory.push_back(roundTripTicks);
         if (roundTripTicksHistory.size() > ROUND_TRIP_HISTORY_SIZE) {
@@ -248,29 +303,53 @@ private:
         int finalFrameAdjustment = (int)accumulatedFrameAdjustment;
         accumulatedFrameAdjustment -= finalFrameAdjustment;
 
-        lastPredictedFrameCount = (predictedFrame + finalFrameAdjustment) - verifiedFrame;
+        // Determine final predicted frame
+        int finalFrame = predictedFrame + finalFrameAdjustment;
+        lastPredictedFrameCount = finalFrame - verifiedFrame;
 
+        return finalFrame;
+    }
+
+    void rollforth(int verifiedFrame, int finalFrame)
+    {
         this->frameNumber = verifiedFrame;
-        for (int f = verifiedFrame + 1; f <= predictedFrame + finalFrameAdjustment; f++) {
+        for (int f = verifiedFrame + 1; f <= finalFrame; f++) {
             INetworkWorldController<EntityType, Entity, Input>::tick();
-
             // Reapply inputs
             for (auto& [id, entity] : entities) {
+                if (entity.isMarkedForDeletion()) continue;
                 const Input &input = entity.timeline.getInput(f);
                 entity.getEntity()->update(input);
             }
 
             // Reapply physics
             this->world->physicsStepHook();
-
             
             // Store new state
             for (auto& [id, entity] : entities) {
+                if (entity.isMarkedForDeletion()) continue;
                 entity.timeline.serializeDataOntoTimeline(f, *entity.getEntity());
             }
         }
     }
 
+    void pruneObjectPool(int verifiedFrame)
+    {
+        for (auto it = entities.begin(); it != entities.end();)
+        {
+            bool isIncorrectPrediction = it->second.getNetworkState() == ClientEntityNetworkState::LOCAL_ONLY && it->second.getFrameCreated() < verifiedFrame;
+            bool isMarkedForDeletion = it->second.getNetworkState() == ClientEntityNetworkState::NETWORK_DELETED && it->second.isMarkedForDeletion();
+            if (isIncorrectPrediction || isMarkedForDeletion) {
+                it = entities.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    /**
+     * REGULAR UPDATE FUNCTIONALITY
+     */
     void sendInputUpdate()
     {
         if (controllerId == -1) return;
@@ -301,6 +380,7 @@ private:
         }
 
         for (auto& [id, entity] : entities) {
+            // if (entity.isMarkedForDeletion()) continue;
             if (id != controllerId) {
                 entity.getEntity()->update(emptyInput);
             }
@@ -349,7 +429,6 @@ private:
     float accumulatedFrameAdjustment;
     std::deque<float> roundTripTicksHistory;
     float averageRoundTripTicks;
-    float maxRoundTripTicks;
     float lastPredictedFrameCount;
     int lastVerifiedFrame;
 

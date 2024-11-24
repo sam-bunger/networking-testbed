@@ -28,6 +28,7 @@ export const ClientSimulationComponent = ({
             let isHoldingRight = false;
             let isHoldingUp = false;
             let isHoldingDown = false
+            let isHoldingSpace = false;
 
             const manageInputs = () => {
                 const gameInput = simulation.getLatestInput();
@@ -47,6 +48,8 @@ export const ClientSimulationComponent = ({
                 } else {
                     gameInput.setUpDown(0);
                 }
+
+                gameInput.setFire(isHoldingSpace);
             }
 
             const onKeyDown = (event: KeyboardEvent) => {
@@ -58,6 +61,8 @@ export const ClientSimulationComponent = ({
                     isHoldingUp = true;
                 } else if (event.key === 's') {
                     isHoldingDown = true;
+                } else if (event.key === ' ') {
+                    isHoldingSpace = true;
                 }
                 manageInputs();
             }
@@ -71,6 +76,8 @@ export const ClientSimulationComponent = ({
                     isHoldingUp = false;
                 } else if (event.key === 's') {
                     isHoldingDown = false;
+                } else if (event.key === ' ') {
+                    isHoldingSpace = false;
                 }
                 manageInputs();
             }

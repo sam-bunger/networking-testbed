@@ -6,6 +6,7 @@
 struct PlayerEntityState : GameEntityState
 {
     float radius;
+    char fireCooldown;
 };
 #pragma pack()
 
@@ -27,4 +28,8 @@ public:
     float getRadius() { return radius; }
 
     float radius;
+    char fireCooldown;
+
+private:
+    void updateFiring(const GameInput &input);
 };

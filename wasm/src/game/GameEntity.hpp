@@ -30,6 +30,9 @@ public:
     );
     virtual ~GameEntity();
 
+    virtual void addToWorld() override;
+    virtual void removeFromWorld() override;
+
     virtual int serializeSize() override;
     virtual void serialize(void* buffer) override;
     virtual void deserialize(void* buffer) override;

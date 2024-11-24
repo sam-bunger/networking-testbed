@@ -1,10 +1,12 @@
 #pragma once
 
+#include <cmath>
 #include "../GameEntity.hpp"
 
 #pragma pack(1)
 struct BulletEntityState : GameEntityState
 {
+    char life;
     float dirX;
     float dirY;
 };
@@ -28,6 +30,7 @@ public:
     void setDirection(float x, float y);
 
 private:
+    char life;
     float dirX;
     float dirY;
 };

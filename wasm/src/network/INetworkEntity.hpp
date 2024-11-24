@@ -18,6 +18,9 @@ public:
     EntityType getType() { return type; }
     EntityController<EntityType, Entity>* getController() { return controller; }
 
+    virtual void addToWorld() = 0;
+    virtual void removeFromWorld() = 0;
+
     virtual void update(const Input &input) = 0;
     virtual int serializeSize() = 0;
     virtual void serialize(void* buffer) = 0;

@@ -53,9 +53,17 @@ int ClientSimulationController::getNextEntityId()
         return -1;
     }
     
-    int id = currentEntityIt->second.getEntity()->getId();
-    ++currentEntityIt;
-    return id;
+    do {
+        auto clientEntity = currentEntityIt->second;
+        if (!clientEntity.isMarkedForDeletion()) {
+            int id = clientEntity.getEntity()->getId();
+            ++currentEntityIt;
+            return id;
+        }
+        ++currentEntityIt;
+    } while (currentEntityIt != controller.getEntities().end());
+    
+    return -1;
 }
 
 int ClientSimulationController::getEntityType(int id)

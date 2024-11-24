@@ -20,4 +20,3 @@ public:
     virtual int getNewEntityId(EntityType type) = 0;
     virtual Entity* createEntity(int id, EntityType type)  = 0;
 };
-

@@ -48,7 +48,23 @@ export function createSimulationCanvas(
                 ctx.arc(x, y, player.getRadius(), 0, Math.PI * 2);
                 ctx.fill();
                 ctx.closePath();
+            } else if (entityType === 1) {
+                const player = simulation.getBulletEntity(nextEntity);
+
+                // Generate a unique color based on entity ID
+                const hue = (nextEntity * 137.508) % 360; // Golden angle approximation for good color distribution
+                ctx.fillStyle = `hsl(${hue}, 70%, 50%)`;
+
+                // Offset x and y to center of canvas
+                const x = player.getX() + canvasRef.width / 2;
+                const y = player.getY() + canvasRef.height / 2;
+
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.closePath();
             }
+            
         } 
     
     }

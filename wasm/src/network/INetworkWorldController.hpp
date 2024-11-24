@@ -1,8 +1,9 @@
 #pragma once
 
+#include <iostream>
+#include <string>
 #include "./IPhysicsWorld.hpp"
 #include "./IEntityController.hpp"
-#include <string>
 
 const int MinEntityId = 10000;
 const int MaxEntityId = 999999;
@@ -37,7 +38,8 @@ public:
     {
         while (true)
         {
-            std::string str = std::to_string(frameNumber) + "_" + std::to_string(type) + "_" + std::to_string(nextId);
+            std::string str = std::to_string(frameNumber) + "_" + std::to_string(type) + "_" + std::to_string(nextId++);
+
             int newId = simpleHash(str);
             if (!this->entityExists(newId))
             {
