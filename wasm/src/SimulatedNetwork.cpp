@@ -117,6 +117,17 @@ std::vector<NetworkPacket> SimulatedNetworkInterface::getReadyPackets(std::list<
     return readyPackets;
 }
 
+int SimulatedNetwork::getKbps()
+{
+
+}
+
+int SimulatedNetwork::getOutgoingKbps()
+{
+    
+}
+
+
 SimulatedNetwork::SimulatedNetwork() 
     : serverInterface(std::make_shared<SimulatedNetworkInterface>())
     , clientInterface(std::make_shared<SimulatedNetworkInterface>())

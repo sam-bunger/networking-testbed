@@ -30,6 +30,9 @@ public:
     std::list<SimulatedPacket>* recieveFrom;
     std::list<SimulatedPacket>* pushTo;
 
+    int getIncomingKbps();
+    int getOutgoingKbps();
+
 private:
     std::vector<NetworkPacket> getReadyPackets(std::list<SimulatedPacket>& queue);
 
