@@ -11,7 +11,6 @@
 #include "../packets/PlayerInputPacket.hpp"
 #include "../packets/output/OutgoingPlayerInputPacket.hpp"
 #include "../packets/input/IncomingWorldStatePacket.hpp"
-#include "../packets/input/IncomingEntityLifecyclePacket.hpp"
 struct ClientConfig 
 {
     ClientConfig(int tps) : ticksPerSeconds(tps) {}
@@ -44,7 +43,6 @@ public:
     virtual Entity* createEntity(EntityType type) override
 	{
 		int id = this->getNewEntityId(type);
-        // std::cout << "Creating entity " << id << std::endl;
 		return (Entity*) createEntity(id, type, false, this->getFrameNumber());
 	}
 
@@ -55,7 +53,6 @@ public:
 
     virtual void destroyEntity(int id) override
 	{
-        // std::cout << "Destroying entity " << id << std::endl;
         destroyEntity(id, false, this->getFrameNumber());
 	}
 
@@ -123,6 +120,10 @@ private:
         {
             entityIt->second.networkCreated();
         }
+        else
+        {
+            entityIt->second.getEntity()->reset();
+        }
 
 		return (Entity*)entityIt->second.getEntity();
 	}
@@ -133,7 +134,10 @@ private:
 		if (it == entities.end()) return;
         it->second.setDeletionState(true);
         it->second.resetFrameDeleted(frameDeleted);
-        if (networkVerified) it->second.networkDeleted();
+        if (networkVerified) 
+        {
+            it->second.networkDeleted();
+        }
     }
 
     void processIncomingMessages()
@@ -154,38 +158,16 @@ private:
                 {
                     auto packet = std::make_shared<IncomingWorldStatePacket<EntityType, Entity, Input>>(message.getPacketData().get(), message.getPacketSize());
                     if (packet->isValid()) {
-                       if (latestWorldState == nullptr || packet->getServerFrame() > latestWorldState->getServerFrame()) {
+                       if (latestWorldState == nullptr || packet->getFinalServerFrame() > latestWorldState->getFinalServerFrame()) {
                            latestWorldState = packet;
                        }
                     }
-                    continue;
-                }
-                case ReservedCommands::ENTITY_LIFECYCLE:
-                {
-                    IncomingEntityLifecyclePacket<EntityType> packet(message.getPacketData().get(), message.getPacketSize());
-                    if (packet.isValid()) handleEntityLifecyclePacket(packet);
                     continue;
                 }
                 default:
                     continue;
             }
         }
-    }
-
-    void handleEntityLifecyclePacket(IncomingEntityLifecyclePacket<EntityType> &packet)
-    {
-        switch (packet.getLifecycleType()) {
-            case EntityLifecycleType::CREATED:
-            {
-                createEntity(packet.getEntityId(), packet.getEntityType(), true, packet.getFrameNumber());
-                break;
-            }
-            case EntityLifecycleType::DESTROYED:
-            {
-                destroyEntity(packet.getEntityId(), true, packet.getFrameNumber());
-                break;
-            }
-        }   
     }
 
     /**
@@ -195,88 +177,108 @@ private:
     {
         if (latestWorldState == NULL) return;
 
-        int verifiedFrame = latestWorldState->getServerFrame();
+        int verifiedFrame = latestWorldState->getFinalServerFrame();
         if (verifiedFrame <= lastVerifiedFrame) return;
         lastVerifiedFrame = verifiedFrame;
 
-        int latestClientFrame = rollback(verifiedFrame);
+        int latestClientFrame = latestWorldState->getLatestClientFrame();
+
+        syncTimelineWithServerState(verifiedFrame);
+        rollback(verifiedFrame);
         int finalFrame = determinePredictedFrame(verifiedFrame, latestClientFrame);
         rollforth(verifiedFrame, finalFrame);
         pruneObjectPool(verifiedFrame);
     }
 
-    int rollback(int verifiedFrame)
+    void syncTimelineWithServerState(int verifiedFrame)
     {
-        int latestClientFrame = -1;
-        // Roll everything back to the verified frame
+        int initialFrame = latestWorldState->getInitialServerFrame();
+        for (auto& [id, header] : latestWorldState->getEntityHeaders()) {
+            if (header->entityPacketType == WorldStateEntityPacketType::ENTITY_DELETED) 
+            {
+                destroyEntity(id, true, verifiedFrame);
+            } 
+            else if (header->entityPacketType == WorldStateEntityPacketType::ENTITY_FULL_RELOAD)
+            {
+                createEntity(id, (EntityType)header->type, true, verifiedFrame);
+
+                ClientEntity<EntityType, Entity, Input>& entity = entities.at(id);
+
+                if (latestWorldState->isControlledEntity(id))
+                {
+                    WorldStateControlledEntityHeader<Input>* controlledHeader = latestWorldState->getControlledEntityHeader(id);
+                    entity.timeline.copyOntoTimeline(verifiedFrame, controlledHeader->input, latestWorldState->getEntityData(id));
+                }
+                else 
+                {
+                    entity.timeline.copyDataOntoTimeline(verifiedFrame, latestWorldState->getEntityData(id));
+                }
+            }
+            else if (header->entityPacketType == WorldStateEntityPacketType::ENTITY_DELTA)
+            {
+                if (entities.find(id) == entities.end())
+                    return;
+
+                ClientEntity<EntityType, Entity, Input>& entity = entities.at(id);
+
+                if (latestWorldState->isControlledEntity(id))
+                {
+                    WorldStateControlledEntityHeader<Input>* controlledHeader = latestWorldState->getControlledEntityHeader(id);
+                    entity.timeline.applyDeltasToTimeline(initialFrame, verifiedFrame, controlledHeader->input, *entity.getEntity(), latestWorldState->deserializeDeltaState(id));
+                }
+                else 
+                {
+                    entity.timeline.applyDeltasToTimeline(initialFrame, verifiedFrame, Input(), *entity.getEntity(), latestWorldState->deserializeDeltaState(id));
+                }
+            }
+        }
+    }
+
+    void rollback(int verifiedFrame)
+    {
+        // std::cout << "[ROLLBACK] Rolling back to frame: " << verifiedFrame << std::endl;
         for (auto& [id, entity] : entities) {
-            if (verifiedFrame < entity.getFrameCreated()) 
+            if (entity.getFrameCreated() > verifiedFrame || (entity.getFrameDeleted() != -1 && entity.getFrameDeleted() <= verifiedFrame)) 
             {
                 entity.setDeletionState(true);
-            } 
-            else if (verifiedFrame >= entity.getFrameCreated() && verifiedFrame < entity.getFrameDeleted()) 
+            }
+            else 
             {
                 entity.setDeletionState(false);
-            }
-
-            if (latestWorldState->isEntityInPacket(id))
-            {
-                WorldStateEntityHeader *header = latestWorldState->getEntityHeader(id);
-                if (header->type != entity.getEntity()->getType()) {
-                    // error - entity type mismatch - figure out way to handle this case
-                    std::cerr << "Entity type mismatch! on no"  << std::endl;
-                    continue;
-                }
-
-                if (latestWorldState->isControlledEntity(id)) {
-                    WorldStateControlledEntityHeader<Input> *controlledHeader = latestWorldState->getControlledEntityHeader(id);
-                    entity.timeline.serializeInputOntoTimeline(verifiedFrame, controlledHeader->input);
-                    if (controlledHeader->id == controllerId) {
-                        latestClientFrame = controlledHeader->latestClientFrame;
-                    }
-                }
-
-                entity.getEntity()->deserialize(latestWorldState->getEntityData(id));
-            }
-            else
-            {
                 entity.timeline.deserializeFromTimeline(verifiedFrame, *entity.getEntity());
             }
 
-            entity.timeline.clearBeforeFrame(verifiedFrame);
+            entity.timeline.clearBeforeFrame(latestWorldState->getInitialServerFrame());
         }
-
-        return latestClientFrame;
     }
 
     int determinePredictedFrame(int verifiedFrame, int latestClientFrame)
     {
-        uint64_t roundTripTime = 0;
         if (latestClientFrame != -1)
         {
-            roundTripTime = getRoundTripTime(latestClientFrame);
-        }
+            uint64_t roundTripTime = getRoundTripTime(latestClientFrame);
 
-        float roundTripTicks = ((float)roundTripTime / (1000.0f / (float)config.ticksPerSeconds));
+            float roundTripTicks = ((float)roundTripTime / (1000.0f / (float)config.ticksPerSeconds));
 
-        // Update rolling average
-        roundTripTicksHistory.push_back(roundTripTicks);
-        if (roundTripTicksHistory.size() > ROUND_TRIP_HISTORY_SIZE) {
-            roundTripTicksHistory.pop_front();
-        }
-        
-        if (!roundTripTicksHistory.empty()) {
-            averageRoundTripTicks = std::accumulate(roundTripTicksHistory.begin(), 
-                                                  roundTripTicksHistory.end(), 
-                                                  0.0f) / roundTripTicksHistory.size();
-        }
+            // Update rolling average
+            roundTripTicksHistory.push_back(roundTripTicks);
+            if (roundTripTicksHistory.size() > ROUND_TRIP_HISTORY_SIZE) {
+                roundTripTicksHistory.pop_front();
+            }
+            
+            if (!roundTripTicksHistory.empty()) {
+                averageRoundTripTicks = std::accumulate(roundTripTicksHistory.begin(), 
+                                                    roundTripTicksHistory.end(), 
+                                                    0.0f) / roundTripTicksHistory.size();
+            }
 
-        // Use exponential moving average for smoother RTT updates
-        if (roundTripTicksHistory.empty()) {
-            averageRoundTripTicks = roundTripTicks;
-        } else {
-            averageRoundTripTicks = averageRoundTripTicks * (1.0f - ADJUSTMENT_RATE) + 
-                                   roundTripTicks * ADJUSTMENT_RATE;
+            // Use exponential moving average for smoother RTT updates
+            if (roundTripTicksHistory.empty()) {
+                averageRoundTripTicks = roundTripTicks;
+            } else {
+                averageRoundTripTicks = averageRoundTripTicks * (1.0f - ADJUSTMENT_RATE) + 
+                                    roundTripTicks * ADJUSTMENT_RATE;
+            }
         }
 
         // Calculate target prediction frames based on RTT
@@ -354,7 +356,7 @@ private:
     {
         if (controllerId == -1) return;
 
-        OutgoingPlayerInputPacket<Input> packet(latestInputs);
+        OutgoingPlayerInputPacket<Input> packet(lastVerifiedFrame, latestInputs);
 
         auto networkPtr = network.lock();
         if (networkPtr) 
@@ -403,8 +405,11 @@ private:
 
     uint64_t getRoundTripTime(int frame)
     {
+        // Remove everything older than the frame
+        inputTimestamps.erase(inputTimestamps.begin(), inputTimestamps.lower_bound(frame));
+
         if (inputTimestamps.find(frame) == inputTimestamps.end()) {
-            return 0;
+            return -1;
         }
 
         return now() - inputTimestamps[frame];

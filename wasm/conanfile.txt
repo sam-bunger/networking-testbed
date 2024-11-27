@@ -1,5 +1,10 @@
 [requires]
 bzip2/1.0.8
+pfr/2.2.0
 
 [generators]
+cmake_find_package
 cmake
+
+[layout]
+cmake_layout

@@ -10,7 +10,6 @@
 #include "../packets/input/IncomingPlayerInputPacket.hpp"
 #include "../packets/output/OutgoingWorldStatePacket.hpp"
 #include "./ClientConnection.hpp"
-#include "../packets/output/OutgoingEntityLifecyclePacket.hpp"
 
 const int MinPlayerId = 1000;
 const int MaxPlayerId = 99999;
@@ -39,10 +38,18 @@ public:
 
 	virtual Entity* createEntity(int id, EntityType type) override
 	{
-		auto newEntity = ServerEntity<EntityType, Entity, Input>(this->world->createEntityHook(id, type, this));
-		auto [it, inserted] = entities.insert({id, newEntity});
-		entityLifecyclePackets.emplace_back(this->frameNumber, true, *it->second.getEntity());
-		return (Entity*) it->second.getEntity();
+		auto entityIt = entities.find(id);
+		if (entityIt == entities.end()) 
+		{
+			auto newEntity = ServerEntity<EntityType, Entity, Input>(this->world->createEntityHook(id, type, this));
+			auto [it, inserted] = entities.insert({id, newEntity});
+			entityIt = it;
+		}
+
+		entityIt->second.setReadyForDeletion(false);
+		entityIt->second.getEntity()->addToWorld();
+
+		return (Entity*) entityIt->second.getEntity();
 	}
 
     virtual void destroyEntity(int id) override
@@ -52,20 +59,22 @@ public:
 			return;
 
 		it->second.setReadyForDeletion(true);
-		entityLifecyclePackets.emplace_back(this->frameNumber, false, *it->second.getEntity());
+		it->second.getEntity()->removeFromWorld();
 	}
 
     virtual Entity* getEntityById(int id) override
 	{
 		auto it = entities.find(id);
-		if (it == entities.end()) 
+		if (!(it != entities.end() && it->second.isEnabled())) 
 			return NULL;
+		
 		return (Entity*) it->second.getEntity();
 	}
 
 	virtual bool entityExists(int id) override
 	{
-		return entities.find(id) != entities.end();
+		auto it = entities.find(id);
+		return it != entities.end() && it->second.isEnabled();
 	}
 
     std::weak_ptr<ClientConnection<EntityType, Entity, Input>> newClient(std::weak_ptr<INetwork> clientNetwork) 
@@ -83,6 +92,7 @@ public:
 		updateEntities();
 		pruneEntities();
 		this->world->physicsStepHook();
+		processWorldState();
 		sendOutgoingMessages();
     }
 
@@ -122,6 +132,7 @@ private:
                         IncomingPlayerInputPacket<Input> packet(message.getPacketData().get(), message.getPacketSize());
                         if (packet.isValid()) {
                             client->inputBuffer.addInputs(packet.getInputs());
+							client->setLastAcknowledgedFrame(packet.getLastAcknowledgedFrame());
                         }
                         continue;
                     }
@@ -150,9 +161,13 @@ private:
 
 			if (client.assignedEntityId != -1) 
 			{
-				INetworkEntity<EntityType, Entity, Input>* e = entities.at(client.assignedEntityId).getEntity();
-				e->update(input.input);
-				controlledEntityInputs[e->getId()] = input;
+				ServerEntity<EntityType, Entity, Input> &e = entities.at(client.assignedEntityId);
+				
+				if (!e.isEnabled()) 
+					continue;
+
+				e.getEntity()->update(input.input);
+				controlledEntityInputs[e.getEntity()->getId()] = input;
 			}
 			
 			++it;
@@ -161,33 +176,44 @@ private:
 		// Update Non-Player Entities
 		for (auto& [id, entity] : entities) {
 			if (controlledEntityInputs.find(id) == controlledEntityInputs.end()) {
+				if (!entity.isEnabled()) 
+					continue;
 				entity.getEntity()->update(emptyInput);
 			}
+		}
+	}
+
+	void processWorldState()
+	{
+		for (auto& [id, entity] : entities) {
+			if (entity.isEnabled()) 
+			{
+				entity.getHistory().serializeCurrentState();
+			}
+
+			// Only keep last two seconds of history, players lagging behind will get a full update
+			entity.getHistory().clearHistoryUntil(this->frameNumber - 120);
 		}
 	}
 
 	void sendOutgoingMessages() {
 		if (this->frameNumber % config.networkUpdateRate == 0)
 		{
-			OutgoingWorldStatePacket packet(this->frameNumber, controlledEntityInputs, entities);
 			for (auto& [_, client] : clients) {
 				auto clientNetwork = client->network.lock();
 				if (!clientNetwork) 
 					continue;
+
+				OutgoingWorldStatePacket packet(
+					client->getLastAcknowledgedFrame(), 
+					this->frameNumber, 
+					client->assignedEntityId,
+					controlledEntityInputs,
+					entities
+				);
 				clientNetwork->pushOutgoingPacket(packet);
 			}
 		}
-
-		for (auto& packet : entityLifecyclePackets) {
-			for (auto& [_, client] : clients) {
-				auto clientNetwork = client->network.lock();
-				if (!clientNetwork) 
-					continue;
-				clientNetwork->pushOutgoingPacket(packet);
-			}
-		}
-
-		entityLifecyclePackets.clear();
 	}
 
 	void pruneEntities()
@@ -211,5 +237,4 @@ private:
 
     std::unordered_map<int, std::shared_ptr<ClientConnection<EntityType, Entity, Input>>> clients;
 
-	std::vector<OutgoingEntityLifecyclePacket<EntityType, Entity, Input>> entityLifecyclePackets;
 };

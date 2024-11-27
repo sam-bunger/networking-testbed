@@ -17,11 +17,6 @@ GameWorld::~GameWorld()
 
 void GameWorld::physicsStepHook()
 {   
-    // Use fixed-point math or ensure consistent floating-point behavior
-    #pragma STDC FENV_ACCESS ON
-    // Set consistent rounding mode
-    fesetround(FE_TONEAREST);
-    
     // Sort entity pairs to ensure consistent collision order
     std::vector<std::pair<int, int>> collisionPairs;
     for (auto& [idA, entityA] : entities) {

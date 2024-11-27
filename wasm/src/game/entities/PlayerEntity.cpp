@@ -34,6 +34,9 @@ void PlayerEntity::update(const GameInput &input)
     vx *= 0.9f;
     vy *= 0.9f;
 
+    if (std::abs(vx) < 0.01f) vx = 0;
+    if (std::abs(vy) < 0.01f) vy = 0;
+
     updateFiring(input);
 }
 
@@ -44,9 +47,9 @@ int PlayerEntity::serializeSize()
 
 void PlayerEntity::serialize(void* buffer)
 {
-    GameEntity::serialize(buffer);
-
     PlayerEntityState* state = (PlayerEntityState*)buffer;
+
+    GameEntity::serialize(&state->entity);
     
     state->radius = radius;
     state->fireCooldown = fireCooldown;
@@ -54,12 +57,28 @@ void PlayerEntity::serialize(void* buffer)
 
 void PlayerEntity::deserialize(void* buffer)
 {
-    GameEntity::deserialize(buffer);
-
     PlayerEntityState* state = (PlayerEntityState*)buffer;
+
+    GameEntity::deserialize(&state->entity);
     
     radius = state->radius;
     fireCooldown = state->fireCooldown;
+}
+
+void PlayerEntity::reset() 
+{
+    radius = 14;
+    fireCooldown = 0;
+}
+
+std::shared_ptr<DeltaState> PlayerEntity::createTypedDiff(void *oldState, void *newState) 
+{
+    return createDiff<PlayerEntityState>((PlayerEntityState*)oldState, (PlayerEntityState*)newState);
+}
+
+void PlayerEntity::applyTypedDiff(void *oldState, DeltaState *deltaState, void *resultBuffer) 
+{
+    return applyDiff<PlayerEntityState>((PlayerEntityState*)oldState, deltaState, (PlayerEntityState*)resultBuffer);
 }
 
 void PlayerEntity::updateFiring(const GameInput &input)

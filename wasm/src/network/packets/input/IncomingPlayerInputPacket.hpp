@@ -11,10 +11,7 @@ class IncomingPlayerInputPacket : public IncomingNetworkPacket
 public:
     IncomingPlayerInputPacket(const void *packet, int size) : IncomingNetworkPacket(packet, size)
     {
-        PlayerInputPacketHeader *header = (PlayerInputPacketHeader *)getPacket();
-        numInputs = header->size;
-
-        int expectedSize = sizeof(PlayerInputPacketHeader) + (numInputs * sizeof(PlayerInputPacket<Input>));
+        int expectedSize = sizeof(PlayerInputPacketHeader) + (getInputCount() * sizeof(PlayerInputPacket<Input>));
         if (getPacketSize() != expectedSize) 
         {
             notValid();
@@ -22,20 +19,24 @@ public:
         }
     }
 
-    std::vector<PlayerInputPacket<Input>> getInputs() const {
+    std::vector<PlayerInputPacket<Input>> getInputs() const 
+    {
         if (!isValid()) return {};
         
         const PlayerInputPacket<Input>* rawInputs = reinterpret_cast<const PlayerInputPacket<Input>*>(
             getPacket() + sizeof(PlayerInputPacketHeader)
         );
 
-        return std::vector<PlayerInputPacket<Input>>(rawInputs, rawInputs + numInputs);
+        return std::vector<PlayerInputPacket<Input>>(rawInputs, rawInputs + getInputCount());
     }
 
-    int getInputCount() const {
-        return numInputs;
+    int getInputCount() const 
+    {
+        return ((PlayerInputPacketHeader *)getPacket())->size;
     }
 
-private:
-    int numInputs;
+    int getLastAcknowledgedFrame() const 
+    {
+        return ((PlayerInputPacketHeader *)getPacket())->acknowledgedFrame;
+    }
 };

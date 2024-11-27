@@ -12,9 +12,12 @@ BulletEntity::BulletEntity(
 
 void BulletEntity::update(const GameInput &input)
 {
-    if (life > 0) {
+    if (life > 0) 
+    {
         --life;
-    } else if (life == 0) {
+    } 
+    else if (life == 0) 
+    {
         getController()->destroyEntity(this->getId());
         life = -1;
     }
@@ -30,9 +33,9 @@ int BulletEntity::serializeSize()
 
 void BulletEntity::serialize(void* buffer)
 {
-    GameEntity::serialize(buffer);
-
     BulletEntityState* state = (BulletEntityState*)buffer;
+
+    GameEntity::serialize(&state->entity);
     
     state->dirX = dirX;
     state->dirY = dirY;
@@ -41,13 +44,30 @@ void BulletEntity::serialize(void* buffer)
 
 void BulletEntity::deserialize(void* buffer)
 {
-    GameEntity::deserialize(buffer);
-
     BulletEntityState* state = (BulletEntityState*)buffer;
+
+    GameEntity::deserialize(&state->entity);
     
     dirX = state->dirX;
     dirY = state->dirY;
     life = state->life;
+}
+
+void BulletEntity::reset() 
+{
+    dirX = 0;
+    dirY = 0;
+    life = 30;
+}
+
+std::shared_ptr<DeltaState> BulletEntity::createTypedDiff(void *oldState, void *newState) 
+{
+    return createDiff<BulletEntityState>((BulletEntityState*)oldState, (BulletEntityState*)newState);
+}
+
+void BulletEntity::applyTypedDiff(void *oldState, DeltaState *deltaState, void *resultBuffer) 
+{
+    return applyDiff<BulletEntityState>((BulletEntityState*)oldState, deltaState, (BulletEntityState*)resultBuffer);
 }
 
 void BulletEntity::setDirection(float x, float y)

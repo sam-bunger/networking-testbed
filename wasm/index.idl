@@ -43,6 +43,8 @@ interface ClientSimulationController : VisualInterface {
   [Ref] GameInput getLatestInput();
   [Ref] SimulatedNetwork getNetwork();
   long getLastPredictedFrameCount();
+  long getDownloadBps();
+  long getUploadBps();
 };
 ClientSimulationController implements VisualInterface;
 

@@ -16,6 +16,31 @@ struct GameEntityState
     float y;
     float vx;
     float vy;
+
+    bool operator!=(const GameEntityState& other) const
+    {
+        return x != other.x || y != other.y || vx != other.vx || vy != other.vy;
+    }
+
+    GameEntityState operator+(const GameEntityState& other) const
+    {
+        return GameEntityState{
+            x + other.x,
+            y + other.y,
+            vx + other.vx,
+            vy + other.vy
+        };
+    }
+
+    GameEntityState operator-(const GameEntityState& other) const
+    {
+        return GameEntityState{
+            x - other.x,
+            y - other.y,
+            vx - other.vx,
+            vy - other.vy
+        };
+    }
 };
 #pragma pack()
 
@@ -36,6 +61,10 @@ public:
     virtual int serializeSize() override;
     virtual void serialize(void* buffer) override;
     virtual void deserialize(void* buffer) override;
+    virtual void reset() override;
+
+    virtual std::shared_ptr<DeltaState> createTypedDiff(void *oldState, void *newState) override;
+    virtual void applyTypedDiff(void *oldState, DeltaState *deltaState, void *resultBuffer) override;
 
     float getX();
     float getY();

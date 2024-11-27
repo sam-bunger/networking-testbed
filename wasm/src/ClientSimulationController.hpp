@@ -19,6 +19,8 @@ public:
     GameInput &getLatestInput();
     int getLastPredictedFrameCount();
 
+    int getDownloadBps();
+    int getUploadBps();
 
     virtual int resetEntityIterator() override;
     virtual int getNextEntityId() override;

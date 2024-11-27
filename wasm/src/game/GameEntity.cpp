@@ -76,3 +76,21 @@ void GameEntity::deserialize(void* buffer)
     vx = state->vx;
     vy = state->vy;
 }
+
+void GameEntity::reset() 
+{
+    x = 0;
+    y = 0;
+    vx = 0;
+    vy = 0;
+}
+
+std::shared_ptr<DeltaState> GameEntity::createTypedDiff(void *oldState, void *newState) 
+{
+    return createDiff<GameEntityState>((GameEntityState*)oldState, (GameEntityState*)newState);
+}
+
+void GameEntity::applyTypedDiff(void *oldState, DeltaState *deltaState, void *resultBuffer) 
+{
+    return applyDiff<GameEntityState>((GameEntityState*)oldState, deltaState, (GameEntityState*)resultBuffer);
+}

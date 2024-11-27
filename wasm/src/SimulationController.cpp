@@ -61,9 +61,18 @@ int SimulationController::getNextEntityId()
         return -1;
     }
     
-    int id = currentEntityIt->second.getEntity()->getId();
-    ++currentEntityIt;
-    return id;
+    do {
+        auto serverEntity = currentEntityIt->second;
+        if (serverEntity.isEnabled()) {
+            int id = serverEntity.getEntity()->getId();
+            ++currentEntityIt;
+            return id;
+        }
+        ++currentEntityIt;
+    } while (currentEntityIt != server->getEntities().end());
+    
+    return -1;
+
 }
 
 int SimulationController::getEntityType(int id)

@@ -8,7 +8,7 @@ template<class Input>
 class OutgoingPlayerInputPacket : public OutgoingNetworkPacket
 {
 public:
-    OutgoingPlayerInputPacket(std::deque<PlayerInputPacket<Input>> inputs)
+    OutgoingPlayerInputPacket(int lastAcknowledgedFrame, std::deque<PlayerInputPacket<Input>> inputs)
     {
         int totalSize = sizeof(PlayerInputPacketHeader) + (inputs.size() * sizeof(PlayerInputPacket<Input>));
 
@@ -16,10 +16,12 @@ public:
 
         PlayerInputPacketHeader *header = (PlayerInputPacketHeader *)getData();
         header->size = inputs.size();
+        header->acknowledgedFrame = lastAcknowledgedFrame;
 
         char *current = (char*)getData() + sizeof(PlayerInputPacketHeader);
 
-        for (const auto& input : inputs) {
+        for (const auto& input : inputs) 
+        {
             PlayerInputPacket<Input> *inputPacket = (PlayerInputPacket<Input> *)current;
             *inputPacket = input;
             current += sizeof(PlayerInputPacket<Input>);

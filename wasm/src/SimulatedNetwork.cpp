@@ -117,16 +117,35 @@ std::vector<NetworkPacket> SimulatedNetworkInterface::getReadyPackets(std::list<
     return readyPackets;
 }
 
-int SimulatedNetwork::getKbps()
+int SimulatedNetworkInterface::getBps()
 {
+    uint64_t currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
 
+    // Remove old windows
+    while (!throughputWindows.empty() && 
+           throughputWindows.front().timestamp < currentTime - WINDOW_SIZE_MS) {
+        throughputWindows.erase(throughputWindows.begin());
+    }
+
+    // Calculate current throughput
+    size_t totalBytes = 0;
+    for (const auto& window : throughputWindows) {
+        totalBytes += window.bytes;
+    }
+
+    return totalBytes;
 }
 
-int SimulatedNetwork::getOutgoingKbps()
+int SimulatedNetwork::getIncomingBps()
 {
-    
+    return clientInterface->getBps();
 }
 
+int SimulatedNetwork::getOutgoingBps()
+{
+    return serverInterface->getBps();
+}
 
 SimulatedNetwork::SimulatedNetwork() 
     : serverInterface(std::make_shared<SimulatedNetworkInterface>())

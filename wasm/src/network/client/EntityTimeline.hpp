@@ -22,59 +22,79 @@ public:
     EntityTimeline(int dataSize) : dataSize(dataSize) 
     {    }
     
+    void copyOntoTimeline(int frameNumber, const Input &input, const void *data)
+    {
+        if (timeline.find(frameNumber) == timeline.end()) {
+            timeline[frameNumber] = std::make_shared<TimelineElement<Input>>(dataSize);
+        }
+        timeline[frameNumber]->input = input;
+        std::memcpy(timeline[frameNumber]->data.get(), data, dataSize);
+    }
+
+    void copyDataOntoTimeline(int frameNumber, const void *data)
+    {
+        if (timeline.find(frameNumber) == timeline.end()) {
+            timeline[frameNumber] = std::make_shared<TimelineElement<Input>>(dataSize);
+        }
+        std::memcpy(timeline[frameNumber]->data.get(), data, dataSize);
+    }
+
+    void applyDeltasToTimeline(int initialFrame, int finalFrame, const Input &input, INetworkEntity<EntityType, Entity, Input> &entity, std::shared_ptr<DeltaState> deltas)
+    {
+        if (timeline.find(initialFrame) == timeline.end())
+            return;
+
+        if (timeline.find(finalFrame) == timeline.end()) 
+        {
+            timeline[finalFrame] = std::make_shared<TimelineElement<Input>>(dataSize);
+        }
+
+        timeline[finalFrame]->input = input;
+
+        void *resultState = timeline[finalFrame]->data.get();
+        void *initialState = timeline[initialFrame]->data.get();
+
+        entity.applyTypedDiff(initialState, (DeltaState *)deltas.get(), resultState);
+    }
+
     void serializeOntoTimeline(int frameNumber, const Input &input, INetworkEntity<EntityType, Entity, Input> &entity)
     {
-        if (entities.find(frameNumber) == entities.end()) {
-            entities[frameNumber] = std::make_shared<TimelineElement<Input>>(dataSize);
+        if (timeline.find(frameNumber) == timeline.end()) {
+            timeline[frameNumber] = std::make_shared<TimelineElement<Input>>(dataSize);
         }
-        entities[frameNumber]->input = input;
-        entity.serialize(entities[frameNumber]->data.get());
+        timeline[frameNumber]->input = input;
+        entity.serialize(timeline[frameNumber]->data.get());
     }
 
     void serializeDataOntoTimeline(int frameNumber, INetworkEntity<EntityType, Entity, Input> &entity)
     {
-        if (entities.find(frameNumber) == entities.end()) {
-            entities[frameNumber] = std::make_shared<TimelineElement<Input>>(dataSize);
+        if (timeline.find(frameNumber) == timeline.end()) 
+        {
+            timeline[frameNumber] = std::make_shared<TimelineElement<Input>>(dataSize);
         }
-        entity.serialize(entities[frameNumber]->data.get());
-    }
-
-    void serializeInputOntoTimeline(int frameNumber, const Input &input)
-    {
-        if (entities.find(frameNumber) == entities.end()) {
-            entities[frameNumber] = std::make_shared<TimelineElement<Input>>(dataSize);
-        }
-        entities[frameNumber]->input = input;
+        entity.serialize(timeline[frameNumber]->data.get());
     }
 
     void deserializeFromTimeline(int frameNumber, INetworkEntity<EntityType, Entity, Input> &entity)
     {
-        if (entities.find(frameNumber) == entities.end()) return;
-        entity.deserialize(entities[frameNumber]->data.get());
+        if (timeline.find(frameNumber) == timeline.end()) return;
+        entity.deserialize(timeline[frameNumber]->data.get());
     }
 
     void clearBeforeFrame(int frameNumber)
     {
-        entities.erase(entities.begin(), entities.lower_bound(frameNumber));
+        timeline.erase(timeline.begin(), timeline.lower_bound(frameNumber));
     }
 
     const Input &getInput(int frameNumber)
     {
-        if (entities.find(frameNumber) == entities.end()) return emptyInput;
-        return entities[frameNumber]->input;
+        if (timeline.find(frameNumber) == timeline.end()) return emptyInput;
+        return timeline[frameNumber]->input;
     }
 
-    // Allows for interating over the timeline
-    using iterator = typename std::map<int, std::shared_ptr<TimelineElement<Input>>>::iterator;
-    using const_iterator = typename std::map<int, std::shared_ptr<TimelineElement<Input>>>::const_iterator;
-
-    iterator begin() { return entities.begin(); }
-    iterator end() { return entities.end(); }
-    const_iterator begin() const { return entities.begin(); }
-    const_iterator end() const { return entities.end(); }
 
 private:
     int dataSize;
-    std::map<int, std::shared_ptr<TimelineElement<Input>>> entities;
+    std::map<int, std::shared_ptr<TimelineElement<Input>>> timeline;
     const Input emptyInput;
 };

@@ -80,3 +80,13 @@ BulletEntity &ClientSimulationController::getBulletEntity(int id)
 {
     return *static_cast<BulletEntity*>(controller.getEntityById(id));
 }
+
+int ClientSimulationController::getDownloadBps()
+{
+    return network.getIncomingBps();
+}
+
+int ClientSimulationController::getUploadBps()
+{
+    return network.getOutgoingBps();
+}

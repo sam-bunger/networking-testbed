@@ -21,6 +21,8 @@ public:
     virtual void pushOutgoingPacket(OutgoingNetworkPacket packet) override;
 
     void setQueues(std::list<SimulatedPacket>* recieveFrom, std::list<SimulatedPacket>* pushTo);
+    
+    int getBps();
 
     float packetDropRate;
     uint64_t packetJitter;
@@ -29,9 +31,6 @@ public:
 
     std::list<SimulatedPacket>* recieveFrom;
     std::list<SimulatedPacket>* pushTo;
-
-    int getIncomingKbps();
-    int getOutgoingKbps();
 
 private:
     std::vector<NetworkPacket> getReadyPackets(std::list<SimulatedPacket>& queue);
@@ -46,6 +45,7 @@ private:
     bool checkThroughputLimit(size_t packetSize);
 };
 
+
 class SimulatedNetwork 
 {
 public: 
@@ -55,6 +55,9 @@ public:
     void setPacketDelay(float delay);
     void setPacketJitter(float jitter);
     void setThroughputRate(float kbps);
+
+    int getIncomingBps();
+    int getOutgoingBps();
 
     std::list<SimulatedPacket> packetsToServer;
     std::list<SimulatedPacket> packetsToClient;

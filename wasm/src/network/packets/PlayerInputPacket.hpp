@@ -3,6 +3,7 @@
 #pragma pack(1)
 struct PlayerInputPacketHeader 
 {
+    int acknowledgedFrame;
     char size;
 };
 

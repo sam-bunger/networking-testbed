@@ -1,5 +1,6 @@
-cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.15)
 
+# Set C++17 as the standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -78,12 +79,25 @@ set(EMCC_BIN ${EMSCRIPTEN}/emcc)
 # Path to the webidl bind script
 set(WEBIDL_BINDER_SCRIPT ${EMSCRIPTEN}/tools/webidl_binder.py)
 
+# Collect include directories from Conan dependencies
+set(CONAN_INCLUDE_FLAGS)
+foreach(dir ${CONAN_INCLUDE_DIRS})
+    list(APPEND CONAN_INCLUDE_FLAGS "-I${dir}")
+endforeach()
 
+# Collect your own include directories if needed
+set(OWN_INCLUDE_FLAGS)
+foreach(dir ${CMAKE_CURRENT_SOURCE_DIR})
+    list(APPEND OWN_INCLUDE_FLAGS "-I${dir}")
+endforeach()
+
+# Modify EMCC_GLUE_ARGS to include the necessary includes
 set(EMCC_GLUE_ARGS
   -c
-  -I${BULLET_SRC_DIR}
-  -I${RAPIDJSON_SRC_DIR}
-  -include${MAIN_HEADER_FILE})
+  -include ${MAIN_HEADER_FILE}
+  ${CONAN_INCLUDE_FLAGS}
+  ${OWN_INCLUDE_FLAGS}
+)
 
 # GLUE
 add_custom_command(
@@ -106,7 +120,13 @@ add_subdirectory(src/game game_library)
 add_subdirectory(src/network network_library)
 add_subdirectory(src main_library)
 
-add_executable(index $<TARGET_OBJECTS:main_library> $<TARGET_OBJECTS:game_library> $<TARGET_OBJECTS:network_library> glue.o)
+add_executable(index 
+    $<TARGET_OBJECTS:main_library> 
+    $<TARGET_OBJECTS:game_library> 
+    $<TARGET_OBJECTS:network_library>
+    glue.o
+)
+
 target_link_libraries(index ${CONAN_LIBS})
 target_link_options(index PUBLIC 
   "SHELL:--post-js glue.js"
@@ -135,4 +155,5 @@ target_link_options(index PUBLIC
   "SHELL:-s TOTAL_MEMORY=${TOTAL_MEMORY}"
   "SHELL:-s BINARYEN_IGNORE_IMPLICIT_TRAPS=1"
   "SHELL:-s ALLOW_MEMORY_GROWTH=0"
+  "SHELL:-s PRECISE_F32=1"
 )

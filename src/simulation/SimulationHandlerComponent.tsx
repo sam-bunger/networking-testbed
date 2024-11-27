@@ -14,7 +14,7 @@ export const SimulationHandlerComponent: React.FC<SimulationHandlerComponentProp
 
     useEffect(() => {
 
-        setClientSimulations([handler.addClientSimulation(),handler.addClientSimulation(),handler.addClientSimulation()]);
+        setClientSimulations([handler.addClientSimulation(),handler.addClientSimulation(),handler.addClientSimulation(),handler.addClientSimulation(),handler.addClientSimulation()]);
 
         return () => {
             handler.dispose();

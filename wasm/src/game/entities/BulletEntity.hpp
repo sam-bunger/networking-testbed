@@ -4,8 +4,9 @@
 #include "../GameEntity.hpp"
 
 #pragma pack(1)
-struct BulletEntityState : GameEntityState
+struct BulletEntityState
 {
+    GameEntityState entity;
     char life;
     float dirX;
     float dirY;
@@ -26,6 +27,10 @@ public:
     virtual int serializeSize() override;
     virtual void serialize(void* buffer) override;
     virtual void deserialize(void* buffer) override;
+    virtual void reset() override;
+
+    virtual std::shared_ptr<DeltaState> createTypedDiff(void *oldState, void *newState) override;
+    virtual void applyTypedDiff(void *oldState, DeltaState *deltaState, void *resultBuffer) override;
 
     void setDirection(float x, float y);
 
