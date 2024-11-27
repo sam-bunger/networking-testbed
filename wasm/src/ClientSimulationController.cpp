@@ -49,11 +49,13 @@ int ClientSimulationController::resetEntityIterator()
 
 int ClientSimulationController::getNextEntityId()
 {
-    if (currentEntityIt == controller.getEntities().end()) {
+    if (currentEntityIt == controller.getEntities().end()) 
+    {
         return -1;
     }
     
-    do {
+    do 
+    {
         auto clientEntity = currentEntityIt->second;
         if (!clientEntity.isMarkedForDeletion()) {
             int id = clientEntity.getEntity()->getId();
@@ -61,7 +63,8 @@ int ClientSimulationController::getNextEntityId()
             return id;
         }
         ++currentEntityIt;
-    } while (currentEntityIt != controller.getEntities().end());
+    } 
+    while (currentEntityIt != controller.getEntities().end());
     
     return -1;
 }

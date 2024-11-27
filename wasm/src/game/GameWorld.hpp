@@ -13,8 +13,9 @@ public:
     GameWorld();
     virtual ~GameWorld();
 
-    void physicsStepHook() override;
-    INetworkEntity<GameEntityType, GameEntity, GameInput>* createEntityHook(int id, GameEntityType type, EntityController<GameEntityType, GameEntity>* controller) override;
+    virtual void physicsStepHook() override;
+    virtual INetworkEntity<GameEntityType, GameEntity, GameInput>* createEntityHook(int id, GameEntityType type, EntityController<GameEntityType, GameEntity>* controller) override;
+    virtual GameInput predictNextInput(const GameInput &input, int frame) override;
 
     virtual void addEntityToWorld(GameEntity* entity) override;
     virtual void removeEntityFromWorld(GameEntity* entity) override;

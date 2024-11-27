@@ -315,13 +315,24 @@ private:
     void rollforth(int verifiedFrame, int finalFrame)
     {
         this->frameNumber = verifiedFrame;
+        int index = 1;
         for (int f = verifiedFrame + 1; f <= finalFrame; f++) {
             INetworkWorldController<EntityType, Entity, Input>::tick();
             // Reapply inputs
             for (auto& [id, entity] : entities) {
                 if (entity.isMarkedForDeletion()) continue;
-                const Input &input = entity.timeline.getInput(f);
-                entity.getEntity()->update(input);
+
+                if (id == controllerId) {
+                    // Controlled user, inputs are not predicted
+                    const Input &input = entity.timeline.getInput(f);
+                    entity.getEntity()->update(input);
+                }
+                else 
+                {
+                    const Input &lastValidInput = entity.timeline.getInput(verifiedFrame);
+                    entity.getEntity()->update(this->world->predictNextInput(lastValidInput, index));
+                }
+                
             }
 
             // Reapply physics
@@ -332,6 +343,8 @@ private:
                 if (entity.isMarkedForDeletion()) continue;
                 entity.timeline.serializeDataOntoTimeline(f, *entity.getEntity());
             }
+
+            index++;
         }
     }
 
@@ -382,9 +395,11 @@ private:
         }
 
         for (auto& [id, entity] : entities) {
-            // if (entity.isMarkedForDeletion()) continue;
+            if (entity.isMarkedForDeletion()) continue;
             if (id != controllerId) {
-                entity.getEntity()->update(emptyInput);
+                Input lastVerifiedInput = entity.timeline.getInput(lastVerifiedFrame);
+                int framesAhead = this->getFrameNumber() - lastVerifiedFrame;
+                entity.getEntity()->update(this->world->predictNextInput(lastVerifiedInput, framesAhead));
             }
         }
     }

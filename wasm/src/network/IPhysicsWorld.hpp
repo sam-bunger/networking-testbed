@@ -14,4 +14,5 @@ public:
 
     virtual void physicsStepHook() = 0;
     virtual INetworkEntity<EntityType, Entity, Input>* createEntityHook(int id, EntityType type, EntityController<EntityType, Entity>* controller) = 0;
+    virtual Input predictNextInput(const Input &input, int frame) = 0;
 };

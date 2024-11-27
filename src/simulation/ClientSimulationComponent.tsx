@@ -15,7 +15,7 @@ export const ClientSimulationComponent = ({
 }: ClientSimulationComponentProps) => {
     const [isFocused, setIsFocused] = useState(false);
     
-    const [packetDelay, setPacketDelay] = useState(150);
+    const [packetDelay, setPacketDelay] = useState(50);
     const [packetDropRate, setPacketDropRate] = useState(0);
     const [packetJitter, setPacketJitter] = useState(0);
     const [throughputRate, setThroughputRate] = useState(100);

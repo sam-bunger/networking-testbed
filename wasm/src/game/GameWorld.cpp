@@ -122,6 +122,15 @@ INetworkEntity<GameEntityType, GameEntity, GameInput>* GameWorld::createEntityHo
     }
 }
 
+GameInput GameWorld::predictNextInput(const GameInput &input, int frame)
+{
+    if (frame > 6)
+    {
+        return GameInput();
+    }
+    return input;
+}
+
 void GameWorld::addEntityToWorld(GameEntity* entity) 
 {
     entities[entity->getId()] = entity;
